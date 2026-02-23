@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const bcrypt = require("bcryptjs");
-// const { request } = require('express');
+//const { request } = require('express');
 const jwt = require('jsonwebtoken');
 
 exports.register = async (request, response) => {
@@ -30,7 +30,7 @@ exports.register = async (request, response) => {
 exports.login = async (request, response) => {
     try {
         const {email, password} = request.body;
-        const user = await User.findOne({email});
+        const user = await User.findOne({ email }).select('+password');
         if (!user) {
             return response.status(400).json({message:"Invalid credentials"});
         }
