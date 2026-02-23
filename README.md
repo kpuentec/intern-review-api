@@ -74,6 +74,7 @@ A backend API for managing company internship reviews. Built with **Node.js**, *
 ---
 
 ## Folder Structure
+```
 intern-review-api/
 ├── src/
 │   ├── app.js
@@ -103,7 +104,7 @@ intern-review-api/
 ├── LICENSE
 ├── .gitignore
 └── README.md
-
+```
 ---
 
 ## .env Setup
