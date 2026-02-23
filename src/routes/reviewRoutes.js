@@ -1,113 +1,112 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/authMiddleware');
-const Review = require('../models/Review');
 const adminOnly = require('../middleware/adminMiddleware');
+const validate = require('../middleware/validate');
+const { createReviewSchema, updateReviewSchema } = require('../validators/reviewSchemas');
+const Review = require('../models/Review');
+const { reviewLimiter } = require('../middleware/rateLimiter');
 
-router.post('/', auth, async (request, response) => {
-    try {
-        const {
-            company,
-            role,
-            location,
-            salary,
-            interviewDifficulty,
-            rating,
-            text
-        } = request.body;
+router.post(
+    '/',
+    auth,
+    reviewLimiter,
+    validate(createReviewSchema),
+    async (request, response, next) => {
+        try {
+            const review = await Review.create({
+                user: request.user.id,
+                ...request.body,
+                status: 'pending'
+            });
 
-        const review = await Review.create({
-            user: request.user.id,
-            company,
-            role,
-            location,
-            salary,
-            interviewDifficulty,
-            rating,
-            text,
-            status: 'pending'
-        });
-
-        response.status(201).json(review);
-    } catch (e) {
-        response.status(500).json({ message: 'Server error' });
+            response.status(201).json(review);
+        } catch (e) {
+            next(e);
+        }
     }
-});
+);
 
-router.patch('/:id', auth, async (request, response) => {
+router.patch(
+    '/:id',
+    auth,
+    validate(updateReviewSchema),
+    async (request, response, next) => {
+        try {
+            const review = await Review.findById(request.params.id);
+
+            if (!review) {
+                response.status(404);
+                throw new Error("Review not found");
+            }
+
+            if (review.user.toString() !== request.user.id) {
+                response.status(403);
+                throw new Error("Not authorized");
+            }
+
+            delete request.body.status;
+            delete request.body.user;
+
+            const updatedReview = await Review.findByIdAndUpdate(
+                request.params.id,
+                request.body,
+                { new: true, runValidators: true }
+            );
+
+            response.json(updatedReview);
+
+        } catch (e) {
+            next(e);
+        }
+    }
+);
+
+router.delete('/:id', auth, async (request, response, next) => {
     try {
         const review = await Review.findById(request.params.id);
 
         if (!review) {
-            return response.status(404).json({ message: 'Review not found' });
+            response.status(404);
+            throw new Error("Review not found");
         }
 
         if (review.user.toString() !== request.user.id) {
-            return response.status(403).json({ message: 'Not authorized' });
-        }
-
-        delete request.body.status;
-        delete request.body.user;
-
-        const updatedReview = await Review.findByIdAndUpdate(
-            request.params.id,
-            request.body,
-            { new: true, runValidators: true }
-        );
-
-        response.json(updatedReview);
-    } catch (e) {
-        console.error(e);
-        response.status(500).json({ message: 'Server error' });
-    }
-});
-
-router.delete('/:id', auth, async (request, response) => {
-    try {
-        const review = await Review.findById(request.params.id);
-
-        if (!review) {
-            return response.status(404).json({ message: 'Review not found' });
-        }
-
-        if (review.user.toString() !== request.user.id) {
-            return response.status(403).json({ message: 'Not authorized' });
+            response.status(403);
+            throw new Error("Not authorized");
         }
 
         await review.deleteOne();
 
-        response.json({ message: 'Review deleted successfully' });
+        response.json({ message: "Review deleted successfully" });
+
     } catch (e) {
-        console.error(e);
-        response.status(500).json({ message: 'Server error' });
+        next(e);
     }
 });
 
-router.get('/', async (request, response) => {
+router.get('/', async (request, response, next) => {
     try {
         const { company, role, page = 1, limit = 10 } = request.query;
-        const pageNumber = Number(page);
-        const limitNumber = Number(limit);
 
         const filter = { status: 'approved' };
-
         if (company) filter.company = company;
         if (role) filter.role = role;
 
         const reviews = await Review.find(filter)
             .sort({ createdAt: -1 })
-            .skip((pageNumber - 1) * limitNumber)
-            .limit(limitNumber)
+            .skip((Number(page) - 1) * Number(limit))
+            .limit(Number(limit))
             .populate('user', 'name email');
 
         response.json(reviews);
+
     } catch (e) {
-        console.error(e);
-        response.status(500).json({ message: 'Server error' });
+        next(e);
     }
 });
 
-router.patch('/:id/approve', auth, adminOnly, async (request, response) => {
+router.patch('/:id/approve', auth, adminOnly, async (request, response, next) => {
     try {
         const review = await Review.findByIdAndUpdate(
             request.params.id,
@@ -116,16 +115,18 @@ router.patch('/:id/approve', auth, adminOnly, async (request, response) => {
         );
 
         if (!review) {
-            return response.status(404).json({ message: 'Review not found' });
+            response.status(404);
+            throw new Error("Review not found");
         }
 
         response.json(review);
+
     } catch (e) {
-        response.status(500).json({ message: 'Server error' });
+        next(e);
     }
 });
 
-router.patch('/:id/reject', auth, adminOnly, async (request, response) => {
+router.patch('/:id/reject', auth, adminOnly, async (request, response, next) => {
     try {
         const review = await Review.findByIdAndUpdate(
             request.params.id,
@@ -134,53 +135,58 @@ router.patch('/:id/reject', auth, adminOnly, async (request, response) => {
         );
 
         if (!review) {
-            return response.status(404).json({ message: 'Review not found' });
+            response.status(404);
+            throw new Error("Review not found");
         }
 
         response.json(review);
+
     } catch (e) {
-        response.status(500).json({ message: 'Server error' });
+        next(e);
     }
 });
 
-router.get('/admin/pending', auth, adminOnly, async (request, response) => {
+router.get('/admin/pending', auth, adminOnly, async (request, response, next) => {
     try {
         const reviews = await Review.find({ status: 'pending' })
             .sort({ createdAt: -1 })
             .populate('user', 'name email');
 
         response.json(reviews);
+
     } catch (e) {
-        response.status(500).json({ message: 'Server error' });
+        next(e);
     }
 });
-
-router.patch('/:id/flag', auth, async (request, response) => {
+router.patch('/:id/flag', auth, async (request, response, next) => {
     try {
         const review = await Review.findById(request.params.id);
 
         if (!review) {
-            return response.status(404).json({ message: 'Review not found' });
+            response.status(404);
+            throw new Error("Review not found");
         }
 
         review.flags += 1;
         await review.save();
 
-        response.json({ message: 'Review flagged' });
+        response.json({ message: "Review flagged" });
+
     } catch (e) {
-        response.status(500).json({ message: 'Server error' });
+        next(e);
     }
 });
 
-router.get('/admin/flagged', auth, adminOnly, async (request, response) => {
+router.get('/admin/flagged', auth, adminOnly, async (request, response, next) => {
     try {
         const reviews = await Review.find({ flags: { $gt: 0 } })
             .sort({ flags: -1 })
             .populate('user', 'name email');
 
         response.json(reviews);
+
     } catch (e) {
-        response.status(500).json({ message: 'Server error' });
+        next(e);
     }
 });
 
