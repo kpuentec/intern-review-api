@@ -2,6 +2,8 @@
 
 A backend API for managing company internship reviews. Built with **Node.js**, **Express**, and **MongoDB**. Includes authentication, review management, and a moderation system for admin approval.
 
+https://intern-review-api-production.up.railway.app/api/docs/
+
 ---
 
 ## Features

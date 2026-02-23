@@ -8,6 +8,7 @@ const errorHandler = require('./middleware/errorMiddleware');
 const { globalLimiter } = require('./middleware/rateLimiter');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
+app.set('trust proxy', 1);
 
 
 app.use(cors());
