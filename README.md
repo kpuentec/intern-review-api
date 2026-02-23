@@ -108,10 +108,11 @@ intern-review-api/
 ---
 
 ## .env Setup
-
+```
 PORT=3000
 MONGO=<your-mongodb-url>
 JWT=<your-jwt-secret>
+```
 
 ---
 
